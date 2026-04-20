@@ -34,11 +34,32 @@ Pour activer **GPT (OpenAI)** ou **Gemini**, définis des variables d’environn
 - **OpenAI**: `OPENAI_API_KEY` (optionnel: `OPENAI_MODEL`, ex `gpt-4o-mini`)
 - **Gemini**: `GOOGLE_API_KEY` (optionnel: `GEMINI_MODEL`, ex `gemini-1.5-flash`)
 
+## Build installateurs (DMG macOS / EXE Windows)
+
+### macOS (DMG)
+
+```bash
+cd /Users/stevenbachimont/Desktop/trad
+npm install
+npm run dist:mac
+```
+
+Le DMG est généré dans `dist/` (ex: `Trad Live-1.0.0-arm64.dmg`).
+
+### Windows (.exe – NSIS)
+
+Sur Windows, dans un terminal:
+
+```bash
+npm install
+npm run dist:win
+```
+
+L’installateur `.exe` est généré dans `dist/`.
+
 ## Notes / limites
 
 - Le menu “Source audio (micro)” liste les micros disponibles, mais **la dictée intégrée du navigateur n’accepte pas toujours un micro spécifique**. Si besoin, change le micro via les permissions du site / paramètres du navigateur.
 - La traduction utilise l’endpoint public `translate.googleapis.com`. Si ton réseau ou ton navigateur bloque la requête (CORS), il faudra passer par un petit proxy (Node/Express) ou une API officielle avec clé.
 - En mode Electron, la fenêtre secondaire est **frameless** (sans bordure) et peut être rendue **transparente** + fond personnalisable depuis la fenêtre principale.
 - En mode Electron, la dictée utilise **Vosk (offline)** via `vosk-browser`. Le modèle FR est téléchargé par `npm run model:fr` (≈ 40–50MB).
-
-# trad

@@ -7,8 +7,20 @@ on:
       - "v*"
 
 jobs:
-  mac:
-    runs-on: macos-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: mac
+            script: dist:mac
+            artifact: mac-build
+          - os: windows-latest
+            name: win
+            script: dist:win
+            artifact: windows-build
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,25 +29,18 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run model:fr
-      - run: npm run dist:mac
+      - run: npm run ${{ matrix.script }}
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-dmg
-          path: dist/*.dmg
-
-  win:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-      - run: npm ci
-      - run: npm run model:fr
-      - run: npm run dist:win
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-exe
-          path: dist/*.exe
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+            dist/latest*.yml
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/*.msi
+            dist/*.zip
+            dist/builder-debug.yml
 
