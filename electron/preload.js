@@ -7,10 +7,6 @@ contextBridge.exposeInMainWorld("tradDesktop", {
   popupSetResizable: (enabled) => ipcRenderer.invoke("popup:setResizable", Boolean(enabled)),
   popupSendState: (payload) => ipcRenderer.send("popup:state", payload),
   translateChunk: (payload) => ipcRenderer.invoke("translate:chunk", payload),
-  onLocalStatus: (handler) => {
-    ipcRenderer.removeAllListeners("local:status");
-    ipcRenderer.on("local:status", (_ev, msg) => handler(msg));
-  },
   onPopupState: (handler) => {
     ipcRenderer.removeAllListeners("popup:state");
     ipcRenderer.on("popup:state", (_ev, payload) => handler(payload));

@@ -34,38 +34,6 @@ Pour activer **GPT (OpenAI)** ou **Gemini**, définis des variables d’environn
 - **OpenAI**: `OPENAI_API_KEY` (optionnel: `OPENAI_MODEL`, ex `gpt-4o-mini`)
 - **Gemini**: `GOOGLE_API_KEY` (optionnel: `GEMINI_MODEL`, ex `gemini-1.5-flash`)
 
-## Traduction 100% locale (souveraine) via Ollama (recommandé pour laptops 16GB)
-
-1. Installer Ollama:
-
-- macOS: via l’installeur sur `https://ollama.com`
-- Windows: via l’installeur sur `https://ollama.com`
-
-1. Télécharger un modèle “léger” (exemple):
-
-```bash
-ollama pull qwen2.5:3b
-```
-
-Optionnel: définir `OLLAMA_MODEL` si tu veux un autre modèle.
-
-1. Dans l’app, choisir **Modèle de traduction → Local (Ollama)**.
-
-## Traduction 100% locale (sans Ollama) – téléchargement au 1er lancement (Option C)
-
-Dans l’app, choisir **Modèle de traduction → Local (intégré)**.
-
-Au premier usage, l’app télécharge automatiquement:
-
-- `llama.cpp` (binaire `llama-server` pour macOS/Windows)
-- un modèle GGUF de traduction (par défaut MADLAD400-3B-MT Q4_K_M, ~1.9GB)
-
-Variables d’environnement optionnelles:
-
-- `LOCAL_TRANSLATE_GGUF_URL`: URL directe du fichier `.gguf`
-- `LOCAL_TRANSLATE_GGUF_FILE`: nom de fichier local (ex: `model.gguf`)
-- `LOCAL_TRANSLATE_CTX`: contexte (ex: `2048`)
-
 ## Build installateurs (DMG macOS / EXE Windows)
 
 ### macOS (DMG)
