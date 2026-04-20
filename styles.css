@@ -1,0 +1,212 @@
+:root{
+  --bg:#0b0b0b;
+  --panel:#111;
+  --text:#fff;
+  --muted:rgba(255,255,255,.72);
+  --line:rgba(255,255,255,.16);
+  --line2:rgba(255,255,255,.10);
+  --accent:#fff;
+  --danger:#ff5c75;
+  --good:#2ee59d;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app{max-width:1200px;margin:0 auto;padding:18px}
+
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  padding:14px;
+  border:1px solid var(--line);
+  background: #000;
+}
+.title{font-size:18px;font-weight:800;letter-spacing:.2px}
+.subtitle{font-size:13px;color:var(--muted);margin-top:2px}
+
+.status{
+  font-size:13px;
+  color:var(--muted);
+  padding:8px 10px;
+  border:1px solid var(--line);
+  background:#0a0a0a;
+  min-height:36px;
+  display:flex;
+  align-items:center;
+}
+
+.layout{
+  margin-top:14px;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:14px;
+}
+
+.block{
+  border:1px solid var(--line);
+  background: #000;
+}
+.blockHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 12px;
+  border-bottom:1px solid var(--line2);
+}
+.blockHeader h2{
+  margin:0;
+  font-size:14px;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+.blockBody{padding:12px}
+
+.formGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.field.full{grid-column: 1 / -1;}
+.field.compactRow select{padding:8px 10px;}
+.field.compactRow label{margin-bottom:6px;}
+
+.field label{
+  display:block;
+  font-size:12px;
+  color:var(--muted);
+  margin:0 0 6px;
+}
+
+.inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+select, input[type="range"]{
+  width:100%;
+}
+select{
+  padding:10px 10px;
+  border:1px solid var(--line);
+  border-radius:0;
+  background:#0a0a0a;
+  color:var(--text);
+  outline:none;
+}
+select:disabled{opacity:.6}
+
+input[type="color"]{
+  width:44px;
+  height:36px;
+  padding:0;
+  border:1px solid var(--line);
+  background:#0a0a0a;
+}
+
+.check{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  font-size:12px;
+  color:var(--muted);
+  user-select:none;
+}
+
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border:1px solid var(--line);
+  background:#0a0a0a;
+  color:var(--muted);
+  font-size:12px;
+  min-height:30px;
+}
+.pill.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+
+.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+
+.actionsRow{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+
+.presetGroups{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line2);
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.presetGroup{
+  border:1px solid var(--line2);
+  padding:10px;
+  background:#050505;
+}
+.presetTitle{
+  font-size:12px;
+  color:var(--muted);
+  margin:0 0 8px;
+  font-weight:700;
+}
+.presetGrid{display:grid;gap:8px}
+.presetRow{display:grid;grid-template-columns: 64px 1fr;gap:10px;align-items:center}
+.presetBtn{
+  width:64px;
+  justify-content:center;
+  padding:8px 10px;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+.presetSel{width:100%}
+
+button{
+  padding:10px 12px;
+  border-radius:0;
+  border:1px solid var(--line);
+  background:#0a0a0a;
+  color:var(--text);
+  cursor:pointer;
+  font-weight:700;
+}
+button:disabled{opacity:.55;cursor:not-allowed}
+.primary{background:#fff;color:#000}
+.ghost{background:#0a0a0a}
+
+.meterWrap{
+  margin-top:10px;
+  height:8px;
+  border:1px solid var(--line);
+  background:#0a0a0a;
+  overflow:hidden;
+}
+.meterBar{
+  height:100%;
+  width:0%;
+  background:#fff;
+  transition: width 80ms linear;
+}
+
+.label{font-size:12px;color:var(--muted);margin:10px 0 6px}
+.pre{
+  margin:0;
+  white-space:pre-wrap;
+  word-break:break-word;
+  padding:10px 10px;
+  border:1px solid var(--line);
+  background:#0a0a0a;
+  min-height:140px;
+}
+.pre.dim{opacity:.75}
+
+@media (max-width: 980px){
+  .layout{grid-template-columns:1fr}
+  .formGrid{grid-template-columns:1fr}
+  .presetGroups{grid-template-columns:1fr}
+}

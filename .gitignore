@@ -1,0 +1,26 @@
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Electron build outputs
+dist/
+out/
+build/
+
+# Electron Builder cache
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vosk model artifacts (downloaded/packed)
+models/
+
+# Temp
+tmp/
+temp/
+

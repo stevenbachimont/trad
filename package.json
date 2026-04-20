@@ -1,0 +1,65 @@
+{
+  "name": "trad",
+  "version": "1.0.0",
+  "description": "Petit outil local: tu parles dans le micro, le navigateur fait la reconnaissance vocale, puis on traduit via Google Translate.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node ./electron/start.js",
+    "model:fr": "node ./scripts/model-fr.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "npm run model:fr && electron-builder --mac dmg",
+    "dist:win": "npm run model:fr && electron-builder --win nsis"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "adm-zip": "^0.5.17",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
+    "tar": "^7.5.13"
+  },
+  "dependencies": {
+    "@lichess-org/vosk-browser": "^0.0.3",
+    "vosk-browser": "^0.0.8"
+  },
+  "build": {
+    "appId": "com.stevenbachimont.trad",
+    "productName": "Trad Live",
+    "files": [
+      "**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "models/**",
+      "node_modules/vosk-browser/dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "models",
+        "to": "models"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
+      "sign": false
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

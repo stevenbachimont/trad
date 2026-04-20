@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Traduction vocale en direct</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <div class="title">Traduction en direct</div>
+          <div class="subtitle">Micro → texte → traduction</div>
+        </div>
+        <div class="status" id="status">Prêt.</div>
+      </header>
+
+      <section class="layout" aria-label="Interface principale">
+        <!-- Bloc 1: Paramètres -->
+        <section class="block" aria-label="Paramètres">
+          <header class="blockHeader">
+            <h2>Paramètres</h2>
+          </header>
+          <div class="blockBody">
+            <div class="formGrid">
+              <div class="field full">
+                <label for="mic">Micro</label>
+                <select id="mic" disabled>
+                  <option>Autorise le micro pour lister les appareils…</option>
+                </select>
+                <div class="meterWrap" aria-label="Niveau micro">
+                  <div class="meterBar" id="micMeter"></div>
+                </div>
+              </div>
+
+              <div class="field compactRow">
+                <label for="sourceLang">Langue parlée</label>
+                <select id="sourceLang"></select>
+              </div>
+
+              <div class="field compactRow">
+                <label for="targetLang">Langue cible</label>
+                <select id="targetLang"></select>
+              </div>
+
+              <div class="field compactRow">
+                <label for="translateProvider">Modèle de traduction</label>
+                <select id="translateProvider">
+                  <option value="google">Google</option>
+                  <option value="openai" disabled>GPT (OpenAI)</option>
+                  <option value="gemini" disabled>Gemini</option>
+                  <option value="copilot" disabled>Copilot (non supporté)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="presetGroups" aria-label="Raccourcis langues">
+              <div class="presetGroup">
+                <div class="presetTitle">Raccourcis – langue parlée</div>
+                <div class="presetGrid" id="spokenPresets">
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="spokenPresetBtn1" type="button">A</button>
+                    <select class="presetSel" id="spokenPresetSel1"></select>
+                  </div>
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="spokenPresetBtn2" type="button">B</button>
+                    <select class="presetSel" id="spokenPresetSel2"></select>
+                  </div>
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="spokenPresetBtn3" type="button">C</button>
+                    <select class="presetSel" id="spokenPresetSel3"></select>
+                  </div>
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="spokenPresetBtn4" type="button">D</button>
+                    <select class="presetSel" id="spokenPresetSel4"></select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="presetGroup">
+                <div class="presetTitle">Raccourcis – langue de traduction</div>
+                <div class="presetGrid" id="targetPresets">
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="targetPresetBtn1" type="button">1</button>
+                    <select class="presetSel" id="targetPresetSel1"></select>
+                  </div>
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="targetPresetBtn2" type="button">2</button>
+                    <select class="presetSel" id="targetPresetSel2"></select>
+                  </div>
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="targetPresetBtn3" type="button">3</button>
+                    <select class="presetSel" id="targetPresetSel3"></select>
+                  </div>
+                  <div class="presetRow">
+                    <button class="ghost presetBtn" id="targetPresetBtn4" type="button">4</button>
+                    <select class="presetSel" id="targetPresetSel4"></select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="actionsRow" aria-label="Actions">
+              <button id="start" class="primary">Démarrer</button>
+              <button id="stop" class="ghost" disabled>Arrêter</button>
+              <button id="clear" class="ghost">Effacer</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bloc 2: Popup -->
+        <section class="block" aria-label="Fenêtre flottante">
+          <header class="blockHeader">
+            <h2>Popup (fenêtre flottante)</h2>
+            <button id="popup" class="ghost" type="button">Ouvrir / Fermer</button>
+          </header>
+          <div class="blockBody">
+            <div class="formGrid">
+              <div class="field">
+                <label for="popupFont">Taille</label>
+                <div class="inline">
+                  <button id="popupSmaller" class="ghost" type="button">A-</button>
+                  <input id="popupFont" type="range" min="12" max="56" step="1" value="28" />
+                  <button id="popupBigger" class="ghost" type="button">A+</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="popupFontFamily">Police</label>
+                <select id="popupFontFamily">
+                  <option value="system">Système</option>
+                  <option value="mono">Monospace</option>
+                  <option value="serif">Serif</option>
+                </select>
+                <div class="inline">
+                  <label class="check">
+                    <input id="popupFontBold" type="checkbox" />
+                    <span>Gras</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="popupBg">Arrière-plan</label>
+                <div class="inline">
+                  <input id="popupBg" type="color" value="#2b2b2b" />
+                  <input id="popupOpacity" type="range" min="0" max="100" step="1" value="100" />
+                  <span class="pill mono" id="popupOpacityLabel">100%</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Options</label>
+                <div class="inline">
+                  <label class="check">
+                    <input id="popupNoFrame" type="checkbox" />
+                    <span>Sans cadre</span>
+                  </label>
+                  <label class="check">
+                    <input id="popupAlwaysOnTop" type="checkbox" checked />
+                    <span>Premier plan</span>
+                  </label>
+                  <label class="check">
+                    <input id="popupResizable" type="checkbox" checked />
+                    <span>Redimensionnable</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bloc 3: Texte reconnu -->
+        <section class="block" aria-label="Texte reconnu">
+          <header class="blockHeader">
+            <h2>Texte reconnu</h2>
+            <div class="inline">
+              <span class="pill" id="recState">inactif</span>
+              <span class="pill mono" id="confidence"></span>
+            </div>
+          </header>
+          <div class="blockBody">
+            <div class="label">Final</div>
+            <pre id="finalText" class="pre"></pre>
+            <div class="label">Intermédiaire</div>
+            <pre id="interimText" class="pre dim"></pre>
+          </div>
+        </section>
+
+        <!-- Bloc 4: Traduction -->
+        <section class="block" aria-label="Traduction">
+          <header class="blockHeader">
+            <h2>Traduction</h2>
+            <span class="pill mono" id="translateState">—</span>
+          </header>
+          <div class="blockBody">
+            <pre id="translatedText" class="pre"></pre>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./node_modules/vosk-browser/dist/vosk.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
