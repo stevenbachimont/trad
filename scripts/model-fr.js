@@ -84,8 +84,14 @@ async function main() {
   console.log(`OK: ${tarGzPath}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // Sur certains runners (Windows), un socket https peut garder l'event loop en vie.
+    // On force une sortie propre pour éviter de bloquer le workflow.
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 
