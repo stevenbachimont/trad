@@ -41,9 +41,9 @@ jobs:
           ELECTRON_BUILDER_LOG_LEVEL: debug
         run: |
           if [[ "${{ matrix.name }}" == "mac" ]]; then
-            npx electron-builder --mac dmg --publish never --verbose
+            npx electron-builder --mac dmg --publish never
           else
-            npx electron-builder --win nsis --publish never --verbose
+            npx electron-builder --win nsis --publish never
           fi
       - name: Show dist contents
         shell: bash
