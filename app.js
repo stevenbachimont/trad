@@ -62,6 +62,8 @@ const HAS_VOSK = typeof window.Vosk !== "undefined";
 
 const PROVIDERS = /** @type {const} */ ({
   google: "google",
+  llamacpp: "llamacpp",
+  ollama: "ollama",
   openai: "openai",
   gemini: "gemini",
 });
@@ -265,12 +267,22 @@ async function translateChunk(text, { signal } = {}) {
     if (!window.tradDesktop?.translateChunk) {
       throw new Error("provider_requires_electron");
     }
-    const out = await window.tradDesktop.translateChunk({
-      provider: translateProvider,
-      sl,
-      tl,
-      text: q,
-    });
+    let out;
+    try {
+      out = await window.tradDesktop.translateChunk({
+        provider: translateProvider,
+        sl,
+        tl,
+        text: q,
+      });
+    } catch (e) {
+      const msg = String(e?.message || e || "translate_provider_failed");
+      throw new Error(`${translateProvider}:${msg}`);
+    }
+    if (translateProvider === PROVIDERS.llamacpp) {
+      // Si on vient d'obtenir une traduction, le moteur est forcément prêt.
+      markLocalIntegratedReady();
+    }
     return {
       translated: out?.translated || "",
       detected: out?.detected ?? null,
@@ -319,6 +331,13 @@ let revealTimer = null;
 let revealQueue = [];
 let revealTargetLine = "";
 let revealCancelled = 0;
+let localIntegratedReady = false;
+
+function markLocalIntegratedReady() {
+  if (!localIntegratedReady) {
+    localIntegratedReady = true;
+  }
+}
 
 function normalizeLine(s) {
   return String(s || "")
@@ -430,6 +449,18 @@ async function translateFinalPiece(piece) {
   } catch (err) {
     translateStateEl.textContent = "erreur";
     postToPopup(getPopupPayload());
+    const msg = String(err?.message || err || "");
+    if (msg.includes("ollama:ollama_not_running")) {
+      setStatus(
+        "Ollama n’est pas lancé. Démarre Ollama (ou choisis “Local (intégré)” ou “Google”).",
+        "danger",
+      );
+    } else if (msg.includes("llamacpp:") && !localIntegratedReady) {
+      setStatus(
+        "Le moteur local intégré n’est pas prêt (téléchargement ou démarrage). Réessaie dans 1–2 minutes.",
+        "danger",
+      );
+    }
   }
 }
 
@@ -460,6 +491,18 @@ async function translateInterim(interimText) {
     if (err?.name === "AbortError") return;
     translateStateEl.textContent = "erreur";
     postToPopup(getPopupPayload());
+    const msg = String(err?.message || err || "");
+    if (msg.includes("ollama:ollama_not_running")) {
+      setStatus(
+        "Ollama n’est pas lancé. Démarre Ollama (ou choisis “Local (intégré)” ou “Google”).",
+        "danger",
+      );
+    } else if (msg.includes("llamacpp:") && !localIntegratedReady) {
+      setStatus(
+        "Le moteur local intégré n’est pas prêt (téléchargement ou démarrage). Réessaie dans 1–2 minutes.",
+        "danger",
+      );
+    }
   }
 }
 
@@ -1198,6 +1241,20 @@ function init() {
     );
     startBtn.disabled = true;
   }
+
+  // Statut du moteur local intégré (téléchargements / démarrage)
+  window.tradDesktop?.onLocalStatus?.((msg) => {
+    const s = String(msg || "");
+    if (!s) return;
+    if (s.includes("Local intégré: prêt")) {
+      markLocalIntegratedReady();
+      if (translateProvider === PROVIDERS.llamacpp) setStatus(s, "good");
+      return;
+    }
+    if (translateProvider === PROVIDERS.llamacpp) {
+      setStatus(s, s.includes("erreur") ? "danger" : "info");
+    }
+  });
 
   startBtn.addEventListener("click", start);
   stopBtn.addEventListener("click", stop);
