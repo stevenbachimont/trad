@@ -57,7 +57,7 @@ async function startStaticServer() {
   if (server && baseUrl) return baseUrl;
   // En prod, le code (HTML/JS/CSS) est dans app.asar (app.getAppPath()).
   // Les ressources "extraResources" (ex: models/) sont dans process.resourcesPath.
-  const appRoot = app.getAppPath();
+  const appRoot = app.isPackaged ? app.getAppPath() : path.join(__dirname, "..");
   const resourcesRoot = process.resourcesPath;
 
   server = http.createServer((req, res) => {
@@ -73,8 +73,15 @@ async function startStaticServer() {
       safePath = safePath.replace(/^(\.\.(\/|$))+/, "");
       safePath = safePath.replace(/^\/+/, "");
 
-      // Routage: models/** vient de extraResources, le reste depuis app.asar
-      const root = safePath.startsWith("models/") ? resourcesRoot : appRoot;
+      // Routage:
+      // - en prod (packagé): models/** vient de extraResources (resources/)
+      // - en dev: models/** est dans le repo (appRoot)
+      // - le reste vient de appRoot (repo en dev, app.asar en prod)
+      const root = safePath.startsWith("models/")
+        ? app.isPackaged
+          ? resourcesRoot
+          : appRoot
+        : appRoot;
       const filePath = path.join(root, safePath);
 
       if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {

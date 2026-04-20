@@ -33,7 +33,7 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-      - run: npm run model:fr
+      - run: npm run model:all
       - name: Build (verbose)
         shell: bash
         env:

@@ -21,7 +21,7 @@ Puis ouvre `http://localhost:5173`.
 ```bash
 cd /Users/stevenbachimont/Desktop/trad
 npm install
-npm run model:fr
+npm run model:all
 npm start
 ```
 
@@ -63,3 +63,6 @@ L’installateur `.exe` est généré dans `dist/`.
 - La traduction utilise l’endpoint public `translate.googleapis.com`. Si ton réseau ou ton navigateur bloque la requête (CORS), il faudra passer par un petit proxy (Node/Express) ou une API officielle avec clé.
 - En mode Electron, la fenêtre secondaire est **frameless** (sans bordure) et peut être rendue **transparente** + fond personnalisable depuis la fenêtre principale.
 - En mode Electron, la dictée utilise **Vosk (offline)** via `vosk-browser`. Le modèle FR est téléchargé par `npm run model:fr` (≈ 40–50MB).
+- En mode Electron, la dictée utilise **Vosk (offline)** via `vosk-browser`. Tu peux télécharger :
+  - les modèles “habituels” : `npm run model:all` (FR/EN/ES/DE/IT)
+  - un seul modèle : `npm run model:en` (ou `fr`, `es`, `de`, `it`)

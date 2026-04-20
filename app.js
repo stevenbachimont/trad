@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 const micSelect = $("mic");
 const sourceLang = $("sourceLang");
 const targetLang = $("targetLang");
+const sttLangSelect = $("sttLang");
 const startBtn = $("start");
 const stopBtn = $("stop");
 const clearBtn = $("clear");
@@ -143,7 +144,14 @@ function labelForLang(code) {
 
 function setSelectValueAndNotify(select, value) {
   if (!select) return;
-  select.value = value;
+  // Si on pilote le modèle STT, on mappe "fr-FR" -> "fr"
+  if (select.id === "sttLang") {
+    const base = String(value || "").split("-")[0].toLowerCase();
+    if (base) select.value = base;
+    else select.value = value;
+  } else {
+    select.value = value;
+  }
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
@@ -476,13 +484,24 @@ let sttProcessor = null;
 let sttSource = null;
 let usingVosk = false;
 
-const VOSK_MODEL_URL = "./models/fr/model.tar.gz";
+let sttLang = "fr";
+function getVoskModelUrl() {
+  return `./models/${encodeURIComponent(sttLang)}/model.tar.gz`;
+}
+
+const STT_TO_BCP47 = {
+  fr: "fr-FR",
+  en: "en-US",
+  es: "es-ES",
+  de: "de-DE",
+  it: "it-IT",
+};
 
 async function ensureVoskModel() {
   if (!HAS_VOSK) throw new Error("vosk_not_loaded");
   if (voskModel) return voskModel;
   setStatus("Chargement du modèle Vosk… (1ère fois = plus long)", "info");
-  voskModel = await window.Vosk.createModel(VOSK_MODEL_URL);
+  voskModel = await window.Vosk.createModel(getVoskModelUrl());
   return voskModel;
 }
 
@@ -520,6 +539,7 @@ function stopVosk() {
     voskRecognizer?.remove?.();
   } catch {}
   voskRecognizer = null;
+  voskModel = null;
 
   setMicMeter(0);
   setRunning(false);
@@ -1054,6 +1074,32 @@ function init() {
   fillLangSelect(sourceLang, "fr-FR");
   fillLangSelect(targetLang, "en-US");
 
+  // STT (Vosk) language
+  try {
+    const savedStt = localStorage.getItem("trad:sttLang");
+    if (savedStt && ["fr", "en", "es", "de", "it"].includes(savedStt)) sttLang = savedStt;
+  } catch {}
+  if (sttLangSelect) sttLangSelect.value = sttLang;
+  sttLangSelect?.addEventListener("change", () => {
+    const next = sttLangSelect.value;
+    if (!["fr", "en", "es", "de", "it"].includes(next)) return;
+    sttLang = next;
+    try {
+      localStorage.setItem("trad:sttLang", sttLang);
+    } catch {}
+    // Aligne la langue source de traduction sur la langue STT
+    const bcp47 = STT_TO_BCP47[sttLang];
+    if (bcp47) setSelectValueAndNotify(sourceLang, bcp47);
+
+    if (usingVosk) {
+      stopVosk();
+      startVosk();
+    } else {
+      // force reload du modèle au prochain start
+      voskModel = null;
+    }
+  });
+
   // Réglages pop-up (fenêtre principale)
   try {
     const saved = Number(localStorage.getItem("trad:popupFontSize"));
@@ -1125,7 +1171,7 @@ function init() {
     storagePrefix: "trad:spokenPreset:",
     buttons: spokenPresetBtns,
     selects: spokenPresetSels,
-    mainSelect: sourceLang,
+    mainSelect: window.tradDesktop && HAS_VOSK ? sttLangSelect : sourceLang,
     defaultCodes: ["fr-FR", "en-US", "es-ES", "de-DE"],
     allowAuto: false,
   });

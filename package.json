@@ -5,7 +5,12 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "node ./electron/start.js",
-    "model:fr": "node ./scripts/model-fr.js",
+    "model:fr": "node ./scripts/model.js fr",
+    "model:en": "node ./scripts/model.js en",
+    "model:es": "node ./scripts/model.js es",
+    "model:de": "node ./scripts/model.js de",
+    "model:it": "node ./scripts/model.js it",
+    "model:all": "node ./scripts/model.js all",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:mac": "npm run model:fr && electron-builder --mac dmg",
