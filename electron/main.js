@@ -55,9 +55,10 @@ function resolveResourcePath(relPath) {
 
 async function startStaticServer() {
   if (server && baseUrl) return baseUrl;
-  const root = app.isPackaged
-    ? process.resourcesPath
-    : path.join(__dirname, "..");
+  // En prod, le code (HTML/JS/CSS) est dans app.asar (app.getAppPath()).
+  // Les ressources "extraResources" (ex: models/) sont dans process.resourcesPath.
+  const appRoot = app.getAppPath();
+  const resourcesRoot = process.resourcesPath;
 
   server = http.createServer((req, res) => {
     try {
@@ -65,17 +66,16 @@ async function startStaticServer() {
       let pathname = decodeURIComponent(u.pathname || "/");
       if (pathname === "/") pathname = "/index.html";
 
-      // Bloque les chemins bizarres
-      const safePath = path
-        .normalize(pathname)
-        .replace(/^(\.\.(\/|\\|$))+/, "");
+      // IMPORTANT (Windows): les URL utilisent des "/" mais path.normalize() met des "\".
+      // Si le chemin commence par "\" ou "/", path.join(root, safePath) ignore root → 404.
+      // On normalise en POSIX puis on enlève les séparateurs de tête.
+      let safePath = path.posix.normalize(pathname);
+      safePath = safePath.replace(/^(\.\.(\/|$))+/, "");
+      safePath = safePath.replace(/^\/+/, "");
 
+      // Routage: models/** vient de extraResources, le reste depuis app.asar
+      const root = safePath.startsWith("models/") ? resourcesRoot : appRoot;
       const filePath = path.join(root, safePath);
-      if (!filePath.startsWith(root)) {
-        res.writeHead(403);
-        res.end("Forbidden");
-        return;
-      }
 
       if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
         res.writeHead(404);
