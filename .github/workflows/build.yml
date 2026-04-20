@@ -3,8 +3,15 @@ name: Build installers
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - master
     tags:
       - "v*"
+  pull_request:
+    branches:
+      - main
+      - master
 
 jobs:
   build:
@@ -14,11 +21,9 @@ jobs:
         include:
           - os: macos-latest
             name: mac
-            script: dist:mac
             artifact: mac-build
           - os: windows-latest
             name: win
-            script: dist:win
             artifact: windows-build
     runs-on: ${{ matrix.os }}
     steps:
@@ -29,7 +34,21 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run model:fr
-      - run: npm run ${{ matrix.script }}
+      - name: Build (verbose)
+        shell: bash
+        env:
+          DEBUG: electron-builder,electron-builder:*
+          ELECTRON_BUILDER_LOG_LEVEL: debug
+        run: |
+          if [[ "${{ matrix.name }}" == "mac" ]]; then
+            npx electron-builder --mac dmg --publish never --verbose
+          else
+            npx electron-builder --win nsis --publish never --verbose
+          fi
+      - name: Show dist contents
+        shell: bash
+        run: |
+          ls -la dist || true
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
