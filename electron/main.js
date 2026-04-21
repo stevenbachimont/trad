@@ -3,6 +3,15 @@ const path = require("path");
 const fs = require("fs");
 const http = require("http");
 const { URL } = require("url");
+const { spawn } = require("child_process");
+const AdmZip = require("adm-zip");
+const tar = require("tar");
+const os = require("os");
+const stream = require("stream");
+const { promisify } = require("util");
+
+const pipeline = promisify(stream.pipeline);
+const { Readable } = stream;
 
 let mainWin = null;
 let popupWin = null;
@@ -10,6 +19,195 @@ let baseUrl = null;
 let server = null;
 let popupAlwaysOnTop = true;
 let popupResizable = true;
+
+// Local LLM (llama.cpp server)
+let localServerProc = null;
+let localServerStarting = null;
+const LOCAL_HOST = "127.0.0.1";
+const LOCAL_PORT = Number(process.env.LOCAL_LLM_PORT || 8088);
+const QWEN_DEFAULT_URL =
+  "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf";
+const LLAMA_CPP_BUILD = process.env.LLAMA_CPP_BUILD || "b8850";
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitForHttp(url, timeoutMs = 20000) {
+  const start = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      const res = await fetch(url, { method: "GET" });
+      if (res.ok) return true;
+    } catch {}
+    if (Date.now() - start > timeoutMs) return false;
+    await sleep(250);
+  }
+}
+
+function resolveLlamaServerPath() {
+  // Priorité: téléchargement automatique (userData), puis env, puis PATH
+  const userBin = path.join(app.getPath("userData"), "local-llm", "bin", process.platform, process.arch);
+  const exe = process.platform === "win32" ? "llama-server.exe" : "llama-server";
+  const candidate = path.join(userBin, exe);
+  if (fs.existsSync(candidate)) return candidate;
+  if (process.env.LLAMA_SERVER_PATH) return process.env.LLAMA_SERVER_PATH;
+  return exe;
+}
+
+function resolveQwenModelPath() {
+  // Modèle téléchargé automatiquement dans userData, fallback env
+  const userModel = path.join(app.getPath("userData"), "local-llm", "models", "qwen2.5-3b-instruct-q4_k_m.gguf");
+  if (fs.existsSync(userModel)) return userModel;
+  return process.env.QWEN_GGUF_PATH || "";
+}
+
+function sendLocalStatus(payload) {
+  try {
+    if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("local:status", payload);
+  } catch {}
+}
+
+async function downloadToFile(url, outFile, label) {
+  fs.mkdirSync(path.dirname(outFile), { recursive: true });
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download_http_${res.status}`);
+  const total = Number(res.headers.get("content-length") || "0") || 0;
+  let done = 0;
+
+  const file = fs.createWriteStream(outFile);
+  if (!res.body) throw new Error("download_no_body");
+
+  // Node/Electron: res.body est un WebStream (pas un Node stream).
+  // On le convertit pour pouvoir utiliser pipeline().
+  const nodeStream =
+    typeof Readable.fromWeb === "function" ? Readable.fromWeb(res.body) : res.body;
+
+  nodeStream.on("data", (chunk) => {
+    done += chunk.length;
+    if (total > 0) {
+      sendLocalStatus({
+        stage: label,
+        progress: Math.min(100, Math.round((done / total) * 100)),
+      });
+    }
+  });
+
+  await pipeline(nodeStream, file);
+  sendLocalStatus({ stage: label, progress: 100 });
+}
+
+function llamaReleaseUrl() {
+  // Binaries officiels ggml-org/llama.cpp
+  if (process.platform === "darwin") {
+    const arch = process.arch === "arm64" ? "arm64" : "x64";
+    return `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_CPP_BUILD}/llama-${LLAMA_CPP_BUILD}-bin-macos-${arch}.tar.gz`;
+  }
+  if (process.platform === "win32") {
+    return `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_CPP_BUILD}/llama-${LLAMA_CPP_BUILD}-bin-win-cpu-x64.zip`;
+  }
+  throw new Error("unsupported_platform_for_local_llm");
+}
+
+async function ensureLlamaServerDownloaded() {
+  const binDir = path.join(app.getPath("userData"), "local-llm", "bin", process.platform, process.arch);
+  const exeName = process.platform === "win32" ? "llama-server.exe" : "llama-server";
+  const exePath = path.join(binDir, exeName);
+  if (fs.existsSync(exePath)) return exePath;
+
+  sendLocalStatus({ stage: "Téléchargement llama-server…", progress: 0 });
+
+  const url = llamaReleaseUrl();
+  const tmpDir = path.join(app.getPath("userData"), "local-llm", "tmp");
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  if (process.platform === "win32") {
+    const zipPath = path.join(tmpDir, `llama-${LLAMA_CPP_BUILD}.zip`);
+    await downloadToFile(url, zipPath, "Téléchargement llama-server…");
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(binDir, true);
+  } else {
+    const tgzPath = path.join(tmpDir, `llama-${LLAMA_CPP_BUILD}.tar.gz`);
+    await downloadToFile(url, tgzPath, "Téléchargement llama-server…");
+    fs.mkdirSync(binDir, { recursive: true });
+    await tar.x({ file: tgzPath, cwd: binDir, strip: 1 });
+    try {
+      fs.chmodSync(exePath, 0o755);
+    } catch {}
+    // macOS: éviter les blocages Gatekeeper sur les binaires téléchargés
+    try {
+      spawn("xattr", ["-dr", "com.apple.quarantine", binDir], { stdio: "ignore" });
+    } catch {}
+  }
+
+  if (!fs.existsSync(exePath)) throw new Error("llama_server_missing_after_extract");
+  return exePath;
+}
+
+async function ensureQwenModelDownloaded() {
+  const modelsDir = path.join(app.getPath("userData"), "local-llm", "models");
+  const modelPath = path.join(modelsDir, "qwen2.5-3b-instruct-q4_k_m.gguf");
+  if (fs.existsSync(modelPath)) return modelPath;
+
+  const url = process.env.QWEN_GGUF_URL || QWEN_DEFAULT_URL;
+  sendLocalStatus({ stage: "Téléchargement modèle Qwen…", progress: 0 });
+  await downloadToFile(url, modelPath, "Téléchargement modèle Qwen…");
+  return modelPath;
+}
+
+async function ensureLocalLlmServer() {
+  if (localServerProc && localServerProc.exitCode == null) return true;
+  if (localServerStarting) return localServerStarting;
+
+  localServerStarting = (async () => {
+    try {
+      // 100% automatique: télécharge le binaire + le modèle si nécessaire
+      await ensureLlamaServerDownloaded();
+      await ensureQwenModelDownloaded();
+
+      const modelPath = resolveQwenModelPath();
+      const llamaServerPath = resolveLlamaServerPath();
+
+      const args = [
+        "-m",
+        modelPath,
+        "--host",
+        LOCAL_HOST,
+        "--port",
+        String(LOCAL_PORT),
+        "--ctx-size",
+        String(Number(process.env.LOCAL_LLM_CTX || 4096)),
+        "--threads",
+        String(Number(process.env.LOCAL_LLM_THREADS || 4)),
+      ];
+
+      sendLocalStatus({ stage: "Démarrage du modèle local…", progress: null });
+      localServerProc = spawn(llamaServerPath, args, {
+        stdio: "ignore",
+        env: process.env,
+      });
+
+      localServerProc.on("exit", () => {
+        localServerProc = null;
+      });
+
+      const ok = await waitForHttp(`http://${LOCAL_HOST}:${LOCAL_PORT}/v1/models`, 60000);
+      if (!ok) throw new Error("local_llm_server_start_timeout");
+      sendLocalStatus({ stage: "Local prêt.", progress: 100 });
+      return true;
+    } catch (e) {
+      sendLocalStatus({ stage: `Erreur local: ${String(e?.message || e)}`, progress: null });
+      throw e;
+    }
+  })();
+
+  try {
+    return await localServerStarting;
+  } finally {
+    localServerStarting = null;
+  }
+}
 
 // Tentative d'activer la Web Speech API dans Electron (dépend de la plateforme/version).
 app.commandLine.appendSwitch("enable-speech-dispatcher");
@@ -222,6 +420,32 @@ app.whenReady().then(async () => {
     const tl = payload?.tl || "en";
     const text = String(payload?.text || "").trim();
     if (!text) return { translated: "", detected: null };
+
+    if (provider === "local") {
+      await ensureLocalLlmServer();
+      const model = process.env.LOCAL_LLM_MODEL || "qwen2.5-3b-instruct";
+
+      const res = await fetch(`http://${LOCAL_HOST}:${LOCAL_PORT}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          messages: [
+            {
+              role: "system",
+              content:
+                "Tu es un moteur de traduction. Réponds uniquement avec la traduction, sans guillemets, sans explication.",
+            },
+            { role: "user", content: `Traduis du ${sl} vers ${tl}:\n${text}` },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error(`local_llm_http_${res.status}`);
+      const data = await res.json();
+      const translated = data?.choices?.[0]?.message?.content?.trim?.() || "";
+      return { translated, detected: null };
+    }
 
     if (provider === "openai") {
       const apiKey = process.env.OPENAI_API_KEY;

@@ -15,5 +15,9 @@ contextBridge.exposeInMainWorld("tradDesktop", {
     ipcRenderer.removeAllListeners("popup:closed");
     ipcRenderer.on("popup:closed", () => handler());
   },
+  onLocalStatus: (handler) => {
+    ipcRenderer.removeAllListeners("local:status");
+    ipcRenderer.on("local:status", (_ev, payload) => handler(payload));
+  },
 });
 
