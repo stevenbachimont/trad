@@ -62,6 +62,7 @@ const HAS_VOSK = typeof window.Vosk !== "undefined";
 
 const PROVIDERS = /** @type {const} */ ({
   google: "google",
+  local: "local",
   openai: "openai",
   gemini: "gemini",
 });
@@ -1164,6 +1165,13 @@ function init() {
       } catch {}
       setStatus(`Moteur de traduction: ${translateProvider}`, "info");
     }
+  });
+
+  // Status updates pour le modèle local (téléchargement/démarrage)
+  window.tradDesktop?.onLocalStatus?.((payload) => {
+    const stage = payload?.stage ? String(payload.stage) : "Local…";
+    const p = typeof payload?.progress === "number" ? payload.progress : null;
+    setStatus(p == null ? stage : `${stage} (${p}%)`, "info");
   });
 
   // Raccourcis de langues (assignables)

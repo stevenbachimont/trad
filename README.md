@@ -34,6 +34,25 @@ Pour activer **GPT (OpenAI)** ou **Gemini**, définis des variables d’environn
 - **OpenAI**: `OPENAI_API_KEY` (optionnel: `OPENAI_MODEL`, ex `gpt-4o-mini`)
 - **Gemini**: `GOOGLE_API_KEY` (optionnel: `GEMINI_MODEL`, ex `gemini-1.5-flash`)
 
+## Traduction locale (offline) – Qwen2.5‑3B‑Instruct (GGUF)
+
+Mode **Local** = l’app télécharge et lance automatiquement un serveur `llama-server` (llama.cpp) + le modèle Qwen (GGUF), puis traduit **sans internet**.
+
+### Utilisation
+
+1. Dans l’app, sélectionner **“Local (Qwen2.5‑3B GGUF)”**
+2. Au premier lancement, l’app télécharge automatiquement :
+   - `llama-server` (binaire précompilé)
+   - le modèle GGUF (taille importante)
+
+### Variables d’environnement (optionnel)
+
+- `LOCAL_LLM_PORT` (défaut 8088)
+- `LOCAL_LLM_CTX` (défaut 4096)
+- `LOCAL_LLM_THREADS` (défaut 4)
+- `QWEN_GGUF_URL` (si tu veux changer la quantification/URL)
+- `LLAMA_CPP_BUILD` (si tu veux forcer une autre release llama.cpp, défaut `b8850`)
+
 ## Build installateurs (DMG macOS / EXE Windows)
 
 ### macOS (DMG)
