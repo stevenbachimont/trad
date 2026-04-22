@@ -6,11 +6,18 @@
   "scripts": {
     "start": "node ./electron/start.js",
     "model:fr": "node ./scripts/model.js fr",
+    "model:fr:big": "node ./scripts/model.js fr big",
     "model:en": "node ./scripts/model.js en",
+    "model:en:lgraph": "node ./scripts/model.js en lgraph",
+    "model:en:big": "node ./scripts/model.js en big",
     "model:es": "node ./scripts/model.js es",
+    "model:es:big": "node ./scripts/model.js es big",
     "model:de": "node ./scripts/model.js de",
+    "model:de:big": "node ./scripts/model.js de big",
     "model:it": "node ./scripts/model.js it",
+    "model:it:big": "node ./scripts/model.js it big",
     "model:all": "node ./scripts/model.js all",
+    "model:all:big": "node ./scripts/model.js all big",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:mac": "npm run model:fr && electron-builder --mac dmg",
@@ -27,6 +34,7 @@
   "dependencies": {
     "@lichess-org/vosk-browser": "^0.0.3",
     "adm-zip": "^0.5.17",
+    "jszip": "^3.10.1",
     "tar": "^7.5.13",
     "vosk-browser": "^0.0.8"
   },

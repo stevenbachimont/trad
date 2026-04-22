@@ -25,6 +25,42 @@ npm run model:all
 npm start
 ```
 
+### Améliorer la précision Vosk
+
+Par défaut, les scripts téléchargent des modèles **small** (rapides mais moins précis).
+Pour de meilleurs résultats (moins d’erreurs / “hallucinations”), utilise les modèles **big** :
+
+```bash
+npm run model:fr:big
+# ou
+npm run model:all:big
+```
+
+Ensuite, dans l’interface, tu peux choisir **“Taille du modèle Vosk”** (small/big).
+
+### Option “Qualité STT” (recommandé)
+
+Dans l’interface, le menu **“Qualité STT”** propose :
+
+- **FR**: `small` en dictée libre, ou `small + grammaire` (anti-hallucination)
+- **EN**: `small` ou **`lgraph` (~128MB)** (bon compromis), avec option grammaire
+
+Pour télécharger le modèle anglais `lgraph` :
+
+```bash
+npm run model:en:lgraph
+```
+
+### Import PPTX → grammaire (anti-hallucination)
+
+Si tu choisis **Qualité STT = Anti-hallucination**, tu peux importer un fichier **.pptx** (slides) pour extraire automatiquement des termes (acronymes, noms propres, concepts) et remplir “Phrases attendues”.
+
+Pré-requis :
+
+```bash
+npm install
+```
+
 ## Traduction via GPT / Gemini (optionnel)
 
 Par défaut, l’app utilise **Google Translate** (sans clé).

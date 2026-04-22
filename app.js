@@ -6,6 +6,12 @@ const micSelect = $("mic");
 const sourceLang = $("sourceLang");
 const targetLang = $("targetLang");
 const sttLangSelect = $("sttLang");
+const sttQualitySelect = $("sttQuality");
+const sttGrammarWrap = $("sttGrammarWrap");
+const sttGrammarInput = $("sttGrammar");
+const pptxFileInput = $("pptxFile");
+const pptxExtractBtn = $("pptxExtract");
+const pptxAppendCheck = $("pptxAppend");
 const startBtn = $("start");
 const stopBtn = $("stop");
 const clearBtn = $("clear");
@@ -23,6 +29,17 @@ const popupFontFamilySelect = $("popupFontFamily");
 const popupFontBoldCheck = $("popupFontBold");
 const translateProviderSelect = $("translateProvider");
 const statusEl = $("status");
+const statusTextEl = $("statusText");
+const modelProgressEl = $("modelProgress");
+
+const helpBtn = $("helpBtn");
+const helpModal = $("helpModal");
+const helpCloseBtn = $("helpClose");
+
+const onboardingModal = $("onboardingModal");
+const onboardingCloseBtn = $("onboardingClose");
+const onboardingOkBtn = $("onboardingOk");
+const onboardingDontShowCheck = $("onboardingDontShow");
 
 const spokenPresetBtns = [
   $("spokenPresetBtn1"),
@@ -102,13 +119,57 @@ function toTranslateCode(bcp47) {
 }
 
 function setStatus(text, kind = "info") {
-  statusEl.textContent = text;
+  if (statusTextEl) statusTextEl.textContent = text;
+  else statusEl.textContent = text;
   statusEl.style.borderColor =
     kind === "danger"
       ? "rgba(255,92,117,.55)"
       : kind === "good"
         ? "rgba(46,229,157,.45)"
         : "rgba(255,255,255,.10)";
+}
+
+function setModelProgress(pctOrNull) {
+  if (!modelProgressEl) return;
+  if (pctOrNull == null) {
+    modelProgressEl.hidden = true;
+    modelProgressEl.value = 0;
+    return;
+  }
+  modelProgressEl.hidden = false;
+  if (pctOrNull === "indeterminate") {
+    // <progress> indeterminate = pas d'attribut value.
+    try {
+      modelProgressEl.removeAttribute("value");
+    } catch {}
+    return;
+  }
+  const v = Math.max(0, Math.min(100, Number(pctOrNull)));
+  modelProgressEl.value = v;
+}
+
+function openHelp() {
+  if (!helpModal) return;
+  helpModal.classList.add("open");
+  helpModal.setAttribute("aria-hidden", "false");
+}
+
+function closeHelp() {
+  if (!helpModal) return;
+  helpModal.classList.remove("open");
+  helpModal.setAttribute("aria-hidden", "true");
+}
+
+function openOnboarding() {
+  if (!onboardingModal) return;
+  onboardingModal.classList.add("open");
+  onboardingModal.setAttribute("aria-hidden", "false");
+}
+
+function closeOnboarding() {
+  if (!onboardingModal) return;
+  onboardingModal.classList.remove("open");
+  onboardingModal.setAttribute("aria-hidden", "true");
 }
 
 function fillLangSelect(select, defaultCode) {
@@ -305,7 +366,7 @@ let translatedFinalAcc = "";
 let interimAbort = null;
 let popupFontSize = 28;
 let popupBg = "#2b2b2b";
-let popupBgOpacity = 1;
+let popupBgOpacity = 0.7;
 let popupNoFrame = false;
 let popupAlwaysOnTop = true;
 let popupResizable = true;
@@ -485,9 +546,232 @@ let sttProcessor = null;
 let sttSource = null;
 let usingVosk = false;
 
+const VOSK_TARGET_SAMPLE_RATE = 16000;
+const VOSK_VAD_RMS_THRESHOLD = 0.008; // ~ -42dBFS (à ajuster selon micro)
+const VOSK_VAD_HANGOVER_FRAMES = 12; // ~ 12 * 4096/48k ≈ 1s max (selon SR)
+
 let sttLang = "fr";
+let sttModelVariant = "small"; // small | lgraph | big
+let sttUseGrammar = false;
+let sttQuality = "fast"; // fast | balanced | anti
+const VOSK_INIT_TIMEOUT_MS = 120_000;
+
+function normalizeTerm(s) {
+  return String(s || "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTextRunsFromPptxXml(xml) {
+  // PowerPoint text runs are typically in <a:t>...</a:t>
+  // Regex sur XML est fragile → on préfère un parse XML.
+  const src = String(xml || "");
+  try {
+    const doc = new DOMParser().parseFromString(src, "application/xml");
+    const nodes = doc.getElementsByTagName("a:t");
+    const out = [];
+    for (const n of nodes) {
+      const v = n?.textContent ?? "";
+      if (v) out.push(v);
+    }
+    return out.join(" ");
+  } catch {
+    // Fallback: regex si DOMParser échoue (environnements bizarres)
+    const out = [];
+    const re = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g;
+    let m = null;
+    while ((m = re.exec(src)) != null) {
+      const raw = m[1] || "";
+      const decoded = raw
+        .replaceAll("&amp;", "&")
+        .replaceAll("&lt;", "<")
+        .replaceAll("&gt;", ">")
+        .replaceAll("&quot;", '"')
+        .replaceAll("&#39;", "'");
+      out.push(decoded);
+    }
+    return out.join(" ");
+  }
+}
+
+function buildGrammarFromConferenceText(text, { maxLines = 700 } = {}) {
+  const t = normalizeTerm(text);
+  if (!t) return [];
+
+  const shouldRejectToken = (w) => {
+    const s = String(w || "").trim();
+    if (!s) return true;
+    // Évite que du XML/attributs polluent la liste (vu dans certains decks)
+    if (s.includes("<") || s.includes(">")) return true;
+    if (s.includes("xmlns") || s.includes("schemas.microsoft.com")) return true;
+    if (/^[ap]\:/.test(s)) return true; // a:..., p:...
+    if (s.includes('="') || s.includes("='")) return true;
+    if (s.includes("}{") || s.includes("{") || s.includes("}")) return true;
+    // Trop numérique → bruit (coordonnées, tailles, ids…)
+    if (/^\d+$/.test(s)) return true;
+    if (/^\d{1,2}([./-]\d{1,2}){1,2}$/.test(s)) return false; // dates courtes OK
+    // Séquences du style 480104 / 1257590 : on les ignore
+    if (/^\d{5,}$/.test(s)) return true;
+    // Unités/valeurs style 0.22 / 1.5G : on ignore
+    if (/^\d+(\.\d+)?[kKmMgG]?$/.test(s)) return true;
+    return false;
+  };
+
+  // Tokenize: keep words with letters/digits and some connectors
+  const tokens = t
+    .split(/[\s/|]+/)
+    .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
+    .filter(Boolean);
+
+  const freq = new Map();
+  const bump = (s, w = 1) => {
+    const key = normalizeTerm(s);
+    if (!key) return;
+    freq.set(key, (freq.get(key) || 0) + w);
+  };
+
+  // Single terms
+  for (const tok of tokens) {
+    const clean = tok.replace(/[“”‘’]/g, "'").trim();
+    if (!clean || shouldRejectToken(clean)) continue;
+    const isAcronym = /^[A-Z0-9]{2,}$/.test(clean);
+    const isCamel = /[a-z][A-Z]/.test(clean);
+    const isLong = clean.length >= 7;
+    const hasDigit = /\d/.test(clean);
+    const looksLikeTerm = isAcronym || isCamel || isLong || hasDigit;
+    if (!looksLikeTerm) continue;
+    bump(clean, isAcronym ? 5 : isCamel ? 3 : 1);
+  }
+
+  // Short phrases (bigrams/trigrams) favoring TitleCase / acronyms
+  const normTokens = tokens.map((x) => x.trim()).filter(Boolean);
+  const isTitleish = (w) => /^[A-ZÀ-Ý][\p{L}\p{N}'’\-]{2,}$/u.test(w) || /^[A-Z0-9]{2,}$/.test(w);
+  for (let i = 0; i < normTokens.length; i++) {
+    const a = normTokens[i];
+    const b = normTokens[i + 1];
+    const c = normTokens[i + 2];
+    if (a && b && isTitleish(a) && isTitleish(b) && !shouldRejectToken(a) && !shouldRejectToken(b))
+      bump(`${a} ${b}`, 2);
+    if (
+      a &&
+      b &&
+      c &&
+      isTitleish(a) &&
+      isTitleish(b) &&
+      isTitleish(c) &&
+      !shouldRejectToken(a) &&
+      !shouldRejectToken(b) &&
+      !shouldRejectToken(c)
+    )
+      bump(`${a} ${b} ${c}`, 3);
+  }
+
+  // Sort by score then length (prefer shorter), then alpha
+  const lines = Array.from(freq.entries())
+    .sort((x, y) => {
+      if (y[1] !== x[1]) return y[1] - x[1];
+      if (x[0].length !== y[0].length) return x[0].length - y[0].length;
+      return x[0].localeCompare(y[0]);
+    })
+    .map(([k]) => k);
+
+  return lines.slice(0, maxLines);
+}
+
+async function extractGrammarFromPptxFile(file) {
+  if (!file) throw new Error("pptx_missing");
+  if (!/\.pptx$/i.test(file.name || "")) throw new Error("pptx_not_supported");
+  if (typeof window.JSZip === "undefined") throw new Error("jszip_missing");
+
+  const buf = await file.arrayBuffer();
+  const zip = await window.JSZip.loadAsync(buf);
+
+  // Slides + notes (souvent utiles)
+  const slideFiles = Object.keys(zip.files).filter(
+    (p) => /^ppt\/slides\/slide\d+\.xml$/i.test(p) || /^ppt\/notesSlides\/notesSlide\d+\.xml$/i.test(p),
+  );
+  if (slideFiles.length === 0) throw new Error("pptx_no_slides");
+
+  let combined = "";
+  for (const p of slideFiles) {
+    const xml = await zip.file(p).async("string");
+    combined += "\n" + extractTextRunsFromPptxXml(xml);
+  }
+  return buildGrammarFromConferenceText(combined, { maxLines: 700 });
+}
+
+async function urlExists(url) {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function withFetchProgress(targetUrl, onProgress, fn) {
+  const originalFetch = window.fetch.bind(window);
+  const target = String(targetUrl);
+
+  window.fetch = async (...args) => {
+    const req = args[0];
+    const url = typeof req === "string" ? req : req?.url;
+    const res = await originalFetch(...args);
+
+    if (!url || String(url) !== target) return res;
+    if (!res.ok) return res;
+    if (!res.body || typeof res.body.getReader !== "function") return res;
+
+    const total = Number(res.headers.get("content-length") || "0") || 0;
+    const reader = res.body.getReader();
+    let received = 0;
+    let lastUiAt = 0;
+
+    const stream = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          onProgress?.(100, received, total);
+          controller.close();
+          return;
+        }
+        received += value?.byteLength || 0;
+        const now = Date.now();
+        if (now - lastUiAt > 120) {
+          lastUiAt = now;
+          const pct = total ? (received / total) * 100 : null;
+          onProgress?.(pct, received, total);
+        }
+        controller.enqueue(value);
+      },
+      cancel(reason) {
+        try {
+          reader.cancel(reason);
+        } catch {}
+      },
+    });
+
+    // On reconstitue une Response consommable par le code Vosk,
+    // tout en comptant les octets pour la progression.
+    return new Response(stream, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    });
+  };
+
+  try {
+    return await fn();
+  } finally {
+    window.fetch = originalFetch;
+  }
+}
+
 function getVoskModelUrl() {
-  return `./models/${encodeURIComponent(sttLang)}/model.tar.gz`;
+  const lang = encodeURIComponent(sttLang);
+  const variant = encodeURIComponent(sttModelVariant);
+  return `./models/${lang}/${variant}/model.tar.gz`;
 }
 
 const STT_TO_BCP47 = {
@@ -501,8 +785,58 @@ const STT_TO_BCP47 = {
 async function ensureVoskModel() {
   if (!HAS_VOSK) throw new Error("vosk_not_loaded");
   if (voskModel) return voskModel;
-  setStatus("Chargement du modèle Vosk… (1ère fois = plus long)", "info");
-  voskModel = await window.Vosk.createModel(getVoskModelUrl());
+  setStatus("Chargement du modèle Vosk…", "info");
+  setModelProgress(0);
+  // Nouveau chemin (avec taille) + fallback compat (ancien chemin sans taille).
+  const preferred = getVoskModelUrl();
+  const legacy = `./models/${encodeURIComponent(sttLang)}/model.tar.gz`;
+  const url = (await urlExists(preferred)) ? preferred : legacy;
+
+  // IMPORTANT: on laisse Vosk faire son propre fetch/extract,
+  // mais on wrap fetch() pour afficher la progression sans double download.
+  if (sttModelVariant === "big") {
+    setStatus(
+      "Modèle Vosk “big” : initialisation très longue (et parfois impossible en WASM). Patiente, ou repasse en “small” si ça n’aboutit pas.",
+      "info",
+    );
+  }
+  setStatus("Téléchargement modèle Vosk…", "info");
+  await withFetchProgress(
+    url,
+    (pct, received, total) => {
+      if (pct == null) {
+        setStatus(
+          `Téléchargement modèle Vosk… ${(received / (1024 * 1024)).toFixed(0)} MB`,
+          "info",
+        );
+        setModelProgress("indeterminate");
+        return;
+      }
+      setStatus(
+        total
+          ? `Téléchargement modèle Vosk… ${pct.toFixed(1)}% (${(
+              received /
+              (1024 * 1024)
+            ).toFixed(0)}/${(total / (1024 * 1024)).toFixed(0)} MB)`
+          : `Téléchargement modèle Vosk… ${pct.toFixed(1)}%`,
+        "info",
+      );
+      setModelProgress(pct);
+    },
+    async () => {
+      setStatus("Initialisation Vosk…", "info");
+      const initPromise = window.Vosk.createModel(url);
+      const timeoutPromise = new Promise((_, reject) => {
+        const t = setTimeout(() => {
+          clearTimeout(t);
+          reject(new Error("vosk_init_timeout"));
+        }, VOSK_INIT_TIMEOUT_MS);
+      });
+      voskModel = await Promise.race([initPromise, timeoutPromise]);
+    },
+  );
+
+  setModelProgress(null);
   return voskModel;
 }
 
@@ -572,12 +906,51 @@ async function startVosk() {
     };
 
     sttStream = await navigator.mediaDevices.getUserMedia(constraints);
-    sttAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Essaye de forcer 16kHz (réduit les erreurs / “hallucinations” sur les modèles Vosk).
+    // Certains environnements ignorent cette valeur (hardware clock), on downsample alors.
+    sttAudioCtx = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: VOSK_TARGET_SAMPLE_RATE,
+      latencyHint: "interactive",
+    });
     try {
       await sttAudioCtx.resume();
     } catch {}
 
-    voskRecognizer = new model.KaldiRecognizer(sttAudioCtx.sampleRate);
+    voskRecognizer = new model.KaldiRecognizer(VOSK_TARGET_SAMPLE_RATE);
+    // Si l’API le supporte, active le retour détaillé (permet filtrage/diagnostic).
+    try {
+      voskRecognizer?.setWords?.(true);
+    } catch {}
+    try {
+      voskRecognizer?.setPartialWords?.(true);
+    } catch {}
+
+    // Grammaire (anti-hallucination): limite les phrases possibles.
+    if (sttUseGrammar) {
+      const raw = String(sttGrammarInput?.value || "");
+      const lines = raw
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const unique = Array.from(new Set(lines)).slice(0, 2000);
+      if (unique.length === 0) {
+        setStatus(
+          "Mode anti-hallucination: ajoute au moins 1 phrase attendue (sinon la grammaire est ignorée).",
+          "danger",
+        );
+      } else {
+        try {
+          // API vosk-browser: setGrammar([...phrases])
+          voskRecognizer?.setGrammar?.(unique);
+          setStatus(`Grammaire active (${unique.length} phrases).`, "info");
+        } catch {
+          setStatus(
+            "Grammaire indisponible avec ce build Vosk. (On continue en dictée libre.)",
+            "danger",
+          );
+        }
+      }
+    }
     let sawAnyResult = false;
     const noResultTimer = setTimeout(() => {
       if (!listenRequested || sawAnyResult) return;
@@ -615,6 +988,33 @@ async function startVosk() {
     sttSource = sttAudioCtx.createMediaStreamSource(sttStream);
     sttProcessor = sttAudioCtx.createScriptProcessor(4096, 1, 1);
 
+    let vadHangover = 0;
+
+    function downsampleFloat32ToTarget(input, inSampleRate) {
+      const outSampleRate = VOSK_TARGET_SAMPLE_RATE;
+      if (!input || !input.length) return input;
+      if (!inSampleRate || inSampleRate === outSampleRate) return input;
+
+      const ratio = inSampleRate / outSampleRate;
+      const outLength = Math.max(1, Math.floor(input.length / ratio));
+      const out = new Float32Array(outLength);
+
+      // Moyennage simple (box filter) pour éviter un aliasing trop violent.
+      let offset = 0;
+      for (let i = 0; i < outLength; i++) {
+        const start = Math.floor(i * ratio);
+        const end = Math.min(input.length, Math.floor((i + 1) * ratio));
+        let sum = 0;
+        let count = 0;
+        for (let j = start; j < end; j++) {
+          sum += input[j];
+          count++;
+        }
+        out[offset++] = count ? sum / count : input[start] ?? 0;
+      }
+      return out;
+    }
+
     sttProcessor.onaudioprocess = (event) => {
       if (!listenRequested || !voskRecognizer) return;
 
@@ -625,8 +1025,20 @@ async function startVosk() {
       const rms = Math.sqrt(sumSq / input.length);
       setMicMeter(Math.min(1, rms * 4));
 
+      // VAD très simple: on ne pousse pas de silence/bruit faible dans le décodeur.
+      // Ça réduit fortement les “phrases fantômes” quand personne ne parle.
+      const speaking = rms >= VOSK_VAD_RMS_THRESHOLD;
+      if (speaking) vadHangover = VOSK_VAD_HANGOVER_FRAMES;
+      else vadHangover = Math.max(0, vadHangover - 1);
+      if (!speaking && vadHangover === 0) return;
+
       try {
-        voskRecognizer.acceptWaveform(event.inputBuffer);
+        const inSr = event.inputBuffer.sampleRate || sttAudioCtx.sampleRate;
+        const down = downsampleFloat32ToTarget(input, inSr);
+        // Construire un AudioBuffer 16kHz pour coller à KaldiRecognizer(16000).
+        const buf = sttAudioCtx.createBuffer(1, down.length, VOSK_TARGET_SAMPLE_RATE);
+        buf.copyToChannel(down, 0, 0);
+        voskRecognizer.acceptWaveform(buf);
       } catch (e) {
         const msg = String(e?.message || e || "acceptWaveform_failed");
         setStatus(`Vosk: erreur audio (${msg})`, "danger");
@@ -648,6 +1060,13 @@ async function startVosk() {
   } catch (e) {
     stopVosk();
     const msg = String(e?.message || e || "unknown");
+    if (msg.includes("vosk_init_timeout")) {
+      setStatus(
+        "Vosk: l’initialisation du modèle a expiré. Le modèle “big” est souvent trop lourd pour `vosk-browser` (WASM). Recommande: repasser en “small” (ou utiliser un moteur STT non-WASM).",
+        "danger",
+      );
+      return;
+    }
     if (msg.includes("404") || msg.includes("model")) {
       setStatus(
         "Modèle Vosk introuvable. Télécharge-le dans `./models/fr/model.tar.gz` (voir README).",
@@ -1081,6 +1500,80 @@ function init() {
     if (savedStt && ["fr", "en", "es", "de", "it"].includes(savedStt)) sttLang = savedStt;
   } catch {}
   if (sttLangSelect) sttLangSelect.value = sttLang;
+
+  // STT quality + grammar
+  try {
+    const savedQuality = localStorage.getItem("trad:sttQuality");
+    if (savedQuality && ["fast", "balanced", "anti"].includes(savedQuality)) sttQuality = savedQuality;
+    const savedGrammar = localStorage.getItem("trad:sttGrammar");
+    if (typeof savedGrammar === "string" && sttGrammarInput) sttGrammarInput.value = savedGrammar;
+  } catch {}
+
+  function applySttQuality(nextQuality) {
+    const q = ["fast", "balanced", "anti"].includes(nextQuality) ? nextQuality : "fast";
+    sttQuality = q;
+
+    // Map qualité -> variante + grammaire
+    if (sttLang === "en") {
+      if (q === "anti") {
+        sttModelVariant = "lgraph";
+        sttUseGrammar = true;
+      } else {
+        sttModelVariant = "small";
+        sttUseGrammar = false;
+      }
+    } else if (sttLang === "fr") {
+      if (q === "anti") {
+        sttModelVariant = "small";
+        sttUseGrammar = true;
+      } else {
+        sttModelVariant = "small";
+        sttUseGrammar = false;
+      }
+    } else {
+      // ES/DE/IT: keep simple small (WASM-friendly)
+      sttModelVariant = "small";
+      sttUseGrammar = q === "anti";
+    }
+
+    if (sttGrammarWrap) sttGrammarWrap.hidden = !sttUseGrammar;
+
+    try {
+      localStorage.setItem("trad:sttQuality", sttQuality);
+    } catch {}
+  }
+
+  function refreshSttQualityOptions() {
+    if (!sttQualitySelect) return;
+    sttQualitySelect.innerHTML = "";
+
+    const add = (value, label) => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      sttQualitySelect.appendChild(opt);
+    };
+
+    if (sttLang === "fr") {
+      add("fast", "small (rapide)");
+      add("anti", "small + vocabulaire (précis)");
+    } else if (sttLang === "en") {
+      add("fast", "small (rapide)");
+      add("anti", "small + vocabulaire (précis)");
+    } else {
+      add("fast", "small (rapide)");
+      add("anti", "small + vocabulaire (précis)");
+    }
+
+    // Si la qualité actuelle n'existe pas pour cette langue, on retombe sur "fast".
+    const values = Array.from(sttQualitySelect.options).map((o) => o.value);
+    if (!values.includes(sttQuality)) sttQuality = "fast";
+    sttQualitySelect.value = sttQuality;
+    applySttQuality(sttQuality);
+  }
+
+  refreshSttQualityOptions();
+
   sttLangSelect?.addEventListener("change", () => {
     const next = sttLangSelect.value;
     if (!["fr", "en", "es", "de", "it"].includes(next)) return;
@@ -1092,6 +1585,8 @@ function init() {
     const bcp47 = STT_TO_BCP47[sttLang];
     if (bcp47) setSelectValueAndNotify(sourceLang, bcp47);
 
+    refreshSttQualityOptions();
+
     if (usingVosk) {
       stopVosk();
       startVosk();
@@ -1101,14 +1596,96 @@ function init() {
     }
   });
 
+  sttQualitySelect?.addEventListener("change", () => {
+    applySttQuality(sttQualitySelect.value);
+    // Recharge le modèle si on est en écoute.
+    if (usingVosk) {
+      stopVosk();
+      startVosk();
+    } else {
+      voskModel = null;
+    }
+    setStatus(`Vosk: ${sttLang} — ${sttQuality}`, "info");
+  });
+
+  sttGrammarInput?.addEventListener("input", () => {
+    try {
+      localStorage.setItem("trad:sttGrammar", String(sttGrammarInput.value || ""));
+    } catch {}
+  });
+
+  pptxExtractBtn?.addEventListener("click", async () => {
+    try {
+      if (!pptxFileInput?.files?.[0]) {
+        setStatus("Choisis un fichier .pptx d’abord.", "danger");
+        return;
+      }
+      setStatus("PPTX: extraction des termes…", "info");
+      setModelProgress("indeterminate");
+
+      const lines = await extractGrammarFromPptxFile(pptxFileInput.files[0]);
+      if (!lines.length) {
+        setStatus("PPTX: aucun terme pertinent détecté (essaie un autre deck).", "danger");
+        setModelProgress(null);
+        return;
+      }
+
+      const existing = String(sttGrammarInput?.value || "").trim();
+      const next = (pptxAppendCheck?.checked && existing
+        ? existing.split("\n").concat(lines)
+        : lines
+      )
+        .map((s) => normalizeTerm(s))
+        .filter(Boolean);
+
+      // Dédoublonne en gardant l'ordre
+      const seen = new Set();
+      const uniq = [];
+      for (const l of next) {
+        const k = l.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        uniq.push(l);
+        if (uniq.length >= 1200) break;
+      }
+
+      if (sttGrammarInput) sttGrammarInput.value = uniq.join("\n");
+      try {
+        localStorage.setItem("trad:sttGrammar", String(sttGrammarInput?.value || ""));
+      } catch {}
+      setModelProgress(null);
+      setStatus(`PPTX: ${uniq.length} termes/phrases ajoutés à la grammaire.`, "good");
+    } catch (e) {
+      setModelProgress(null);
+      setStatus(`PPTX: échec (${String(e?.message || e)})`, "danger");
+    }
+  });
+
   // Réglages pop-up (fenêtre principale)
   try {
     const saved = Number(localStorage.getItem("trad:popupFontSize"));
     if (Number.isFinite(saved) && saved >= 12 && saved <= 72) popupFontSize = saved;
     const savedBg = localStorage.getItem("trad:popupBg");
     if (typeof savedBg === "string" && /^#[0-9a-fA-F]{6}$/.test(savedBg)) popupBg = savedBg;
-    const savedOp = Number(localStorage.getItem("trad:popupBgOpacity"));
-    if (Number.isFinite(savedOp) && savedOp >= 0 && savedOp <= 1) popupBgOpacity = savedOp;
+    // Migration: anciens défauts/états possibles = 1.0 (100%) ou 0.0 (0%).
+    // Nouveau défaut souhaité = 0.7 (70%).
+    // On ne force qu'une seule fois (pour corriger les anciens états).
+    const migratedKey = "trad:popupBgOpacityMigrated";
+    const hasMigrated = localStorage.getItem(migratedKey) === "1";
+    const rawOp = localStorage.getItem("trad:popupBgOpacity");
+    const savedOp = Number(rawOp);
+    const shouldMigrateDefault =
+      !hasMigrated &&
+      // clé absente (premier lancement), ou valeur “extrême” souvent issue d’anciens défauts/bugs
+      (rawOp == null || savedOp === 0 || savedOp === 1);
+
+    if (shouldMigrateDefault) {
+      popupBgOpacity = 0.7;
+      localStorage.setItem("trad:popupBgOpacity", String(popupBgOpacity));
+      localStorage.setItem(migratedKey, "1");
+    } else if (Number.isFinite(savedOp) && savedOp >= 0 && savedOp <= 1) {
+      popupBgOpacity = savedOp;
+    }
     const savedNoFrame = localStorage.getItem("trad:popupNoFrame");
     if (savedNoFrame === "1" || savedNoFrame === "0") popupNoFrame = savedNoFrame === "1";
     const savedAot = localStorage.getItem("trad:popupAlwaysOnTop");
@@ -1172,6 +1749,9 @@ function init() {
     const stage = payload?.stage ? String(payload.stage) : "Local…";
     const p = typeof payload?.progress === "number" ? payload.progress : null;
     setStatus(p == null ? stage : `${stage} (${p}%)`, "info");
+    // Réutilise la barre de progression (même UX que Vosk).
+    if (p == null) setModelProgress("indeterminate");
+    else setModelProgress(p);
   });
 
   // Raccourcis de langues (assignables)
@@ -1319,6 +1899,53 @@ function init() {
   // Remplir les micros dès le chargement (demandera une permission).
   requestMicAndListDevices();
   navigator.mediaDevices?.addEventListener?.("devicechange", requestMicAndListDevices);
+
+  // Aide (modal)
+  helpBtn?.addEventListener("click", () => openHelp());
+  helpCloseBtn?.addEventListener("click", () => closeHelp());
+  helpModal?.addEventListener("click", (e) => {
+    // clic sur l'overlay (en dehors de la carte) => ferme
+    if (e?.target === helpModal) closeHelp();
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e?.key === "Escape") {
+      closeHelp();
+      closeOnboarding();
+    }
+  });
+
+  // Avant de commencer (modal au lancement)
+  const onboardingKey = "trad:onboardingHidden";
+  let hidden = false;
+  try {
+    hidden = localStorage.getItem(onboardingKey) === "1";
+  } catch {}
+  if (!hidden) {
+    // Laisse le DOM respirer (meilleure UX au chargement)
+    setTimeout(() => openOnboarding(), 120);
+  }
+
+  const commitOnboardingChoice = () => {
+    const dontShow = Boolean(onboardingDontShowCheck?.checked);
+    try {
+      localStorage.setItem(onboardingKey, dontShow ? "1" : "0");
+    } catch {}
+  };
+
+  onboardingOkBtn?.addEventListener("click", () => {
+    commitOnboardingChoice();
+    closeOnboarding();
+  });
+  onboardingCloseBtn?.addEventListener("click", () => {
+    commitOnboardingChoice();
+    closeOnboarding();
+  });
+  onboardingModal?.addEventListener("click", (e) => {
+    if (e?.target === onboardingModal) {
+      commitOnboardingChoice();
+      closeOnboarding();
+    }
+  });
 
   window.addEventListener("beforeunload", () => closePopup());
 }

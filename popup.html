@@ -15,14 +15,15 @@
       body{
         margin:0;
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-        background: rgba(11,18,32,.92);
+        /* Valeur par défaut (avant de recevoir l’état depuis la fenêtre principale) */
+        background: rgba(43,43,43,.70);
         color:var(--text);
       }
       /* Fenêtre frameless: clic-glisser n'importe où pour déplacer */
       .wrap{height:100%;padding:12px;-webkit-app-region: drag;}
       .card{
         height:100%;
-        background: rgba(0,0,0,.12);
+        background: rgba(0,0,0,0.7);
         border:1px solid var(--line);
         border-radius:14px;
         box-shadow:var(--shadow);

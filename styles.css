@@ -41,7 +41,63 @@ body{
   background:#0a0a0a;
   min-height:36px;
   display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:6px;
+}
+
+.status progress{
+  width:240px;
+  max-width:100%;
+  height:10px;
+  accent-color:#fff;
+}
+
+.modalOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.55);
+  display:none;
   align-items:center;
+  justify-content:center;
+  padding:18px;
+  z-index: 9999;
+}
+.modalOverlay.open{display:flex;}
+.modalCard{
+  width:min(860px, 96vw);
+  max-height: min(78vh, 820px);
+  overflow:auto;
+  border:1px solid var(--line);
+  background: #000;
+  box-shadow: 0 24px 80px rgba(0,0,0,.55);
+}
+.modalHeader{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 14px;
+  border-bottom:1px solid var(--line2);
+}
+.modalTitle{font-size:14px;font-weight:900;letter-spacing:.2px}
+.modalSubtitle{font-size:12px;color:var(--muted);margin-top:3px}
+.modalBody{padding:14px 14px 16px}
+.modalSectionTitle{
+  margin:14px 0 6px;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.2px;
+  color: rgba(232,238,252,.95);
+}
+.modalText{font-size:13px; color: var(--muted); line-height:1.45}
+.modalList{
+  margin:8px 0 0 18px;
+  padding:0;
+  color: var(--muted);
+  font-size:13px;
+  line-height:1.45;
 }
 
 .layout{
@@ -92,6 +148,19 @@ body{
 select, input[type="range"]{
   width:100%;
 }
+textarea{
+  width:100%;
+  padding:10px 10px;
+  border:1px solid var(--line);
+  border-radius:0;
+  background:#0a0a0a;
+  color:var(--text);
+  outline:none;
+  resize:vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height:1.35;
+}
+textarea:disabled{opacity:.6}
 select{
   padding:10px 10px;
   border:1px solid var(--line);
