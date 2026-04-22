@@ -13,7 +13,15 @@
           <div class="title">Traduction en direct</div>
           <div class="subtitle">Micro → texte → traduction</div>
         </div>
-        <div class="status" id="status">Prêt.</div>
+        <div class="inline" style="justify-content:flex-end;">
+          <button id="helpBtn" class="ghost" type="button" aria-haspopup="dialog" aria-controls="helpModal">
+            Aide
+          </button>
+          <div class="status" id="status">
+            <div id="statusText">Prêt.</div>
+            <progress id="modelProgress" max="100" value="0" hidden></progress>
+          </div>
+        </div>
       </header>
 
       <section class="layout" aria-label="Interface principale">
@@ -53,6 +61,33 @@
                   <option value="de">Allemand</option>
                   <option value="it">Italien</option>
                 </select>
+              </div>
+
+              <div class="field compactRow">
+                <label for="sttQuality">Qualité STT</label>
+                <select id="sttQuality"></select>
+              </div>
+
+              <div class="field full" id="sttGrammarWrap" hidden>
+                <label for="sttGrammar">
+                  Vocabulaire/phrases attendus (1 par ligne) — réduit fortement les hallucinations
+                </label>
+                <div class="inline" style="margin:8px 0 10px;">
+                  <input id="pptxFile" type="file" accept=".pptx" />
+                  <button id="pptxExtract" class="ghost" type="button">Importer PPTX → extraire termes</button>
+                  <label class="check" style="margin-left:auto;">
+                    <input id="pptxAppend" type="checkbox" />
+                    <span>Ajouter (au lieu de remplacer)</span>
+                  </label>
+                </div>
+                <textarea
+                  id="sttGrammar"
+                  rows="5"
+                  placeholder="Ex:\nbonjour\nmerci\nje voudrais une bière\n..."
+                ></textarea>
+                <div class="label" id="pptxHint" style="margin-top:8px;">
+                  Astuce: pour une conférence, extraire surtout les termes (acronymes, noms propres) plutôt que le texte complet.
+                </div>
               </div>
 
               <div class="field compactRow">
@@ -144,6 +179,7 @@
                   <option value="system">Système</option>
                   <option value="mono">Monospace</option>
                   <option value="serif">Serif</option>
+                  <option value="custom">Helvetica</option>
                 </select>
                 <div class="inline">
                   <label class="check">
@@ -157,8 +193,8 @@
                 <label for="popupBg">Arrière-plan</label>
                 <div class="inline">
                   <input id="popupBg" type="color" value="#2b2b2b" />
-                  <input id="popupOpacity" type="range" min="0" max="100" step="1" value="100" />
-                  <span class="pill mono" id="popupOpacityLabel">100%</span>
+                  <input id="popupOpacity" type="range" min="0" max="100" step="1" value="70" />
+                  <span class="pill mono" id="popupOpacityLabel">70%</span>
                 </div>
               </div>
 
@@ -213,7 +249,121 @@
       </section>
     </main>
 
+    <!-- Modals MUST overlay app without affecting layout -->
+    <div class="modalOverlay" id="helpModal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modalCard" role="document" aria-label="Aide">
+        <div class="modalHeader">
+          <div>
+            <div class="modalTitle">Aide — comment ça fonctionne</div>
+            <div class="modalSubtitle">Transcription (STT) + Traduction en direct</div>
+          </div>
+          <button id="helpClose" class="ghost" type="button">Fermer</button>
+        </div>
+        <div class="modalBody">
+          <div class="modalSectionTitle">1) Deux moteurs, deux rôles</div>
+          <div class="modalText">
+            <b>STT (transcription)</b> : transforme l’audio du micro en texte (offline via Vosk dans Electron).
+            <br />
+            <b>Traduction</b> : transforme le texte reconnu en texte traduit (Google par défaut, ou Local si activé).
+          </div>
+
+          <div class="modalSectionTitle">2) Réglages STT</div>
+          <div class="modalText">
+            <b>small (rapide)</b> : dictée libre, meilleur choix pour conférences (vocabulaire ouvert).
+            <br />
+            <b>small + vocabulaire (précis)</b> : utile si tu as une liste de termes/phrases attendus (réduit les “hallucinations”),
+            mais peut brider la dictée si l’orateur sort du vocabulaire.
+          </div>
+
+          <div class="modalSectionTitle">3) Import PPTX (option vocabulaire)</div>
+          <div class="modalText">
+            Si tu as un deck, importe un <b>.pptx</b> pour extraire des <b>termes</b> (acronymes, noms propres, concepts) et remplir
+            automatiquement le champ “vocabulaire/phrases attendus”.
+          </div>
+
+          <div class="modalSectionTitle">4) Conseils pour de meilleurs résultats</div>
+          <ul class="modalList">
+            <li><b>Micro</b> : le plus proche possible de l’orateur (distance/bruit = erreurs).</li>
+            <li><b>Silences</b> : évite de laisser tourner sur une salle très bruyante si personne ne parle.</li>
+            <li><b>Conférences</b> : préfère <b>small (rapide)</b>. Utilise “vocabulaire” seulement pour <b>termes</b> clés.</li>
+            <li><b>Intermédiaire</b> : le texte “intermédiaire” est moins fiable que le “final”.</li>
+          </ul>
+
+          <div class="modalSectionTitle">5) Dépannage rapide</div>
+          <div class="modalText">
+            Si la transcription paraît incohérente : baisse le bruit, rapproche le micro, ou reviens en <b>small (rapide)</b>.
+            Si un modèle met longtemps à se charger, regarde la barre de progression en haut.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modalOverlay" id="onboardingModal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modalCard" role="document" aria-label="Avant de commencer">
+        <div class="modalHeader">
+          <div>
+            <div class="modalTitle">Avant de commencer</div>
+            <div class="modalSubtitle">Paramétrage rapide (micro → transcription → traduction)</div>
+          </div>
+          <button id="onboardingClose" class="ghost" type="button">Fermer</button>
+        </div>
+        <div class="modalBody">
+          <div class="modalSectionTitle">1) Sélectionner le micro</div>
+          <div class="modalText">
+            Dans <b>Micro</b>, choisis le micro à utiliser (idéalement un micro proche de l’orateur). Le vu‑mètre t’aide à
+            vérifier que le bon micro capte bien la voix.
+          </div>
+
+          <div class="modalSectionTitle">2) Choisir les langues</div>
+          <div class="modalText">
+            - <b>Langue parlée</b> : la langue que tu entends (ou que tu parles).<br />
+            - <b>Langue cible</b> : la langue dans laquelle tu veux afficher la traduction.
+          </div>
+
+          <div class="modalSectionTitle">3) Choisir les modèles</div>
+          <div class="modalText">
+            - <b>Modèle voix (Vosk)</b> : la langue de transcription (offline en mode Electron).<br />
+            - <b>Qualité STT</b> :<br />
+            &nbsp;&nbsp;• <b>small (rapide)</b> : recommandé pour conférences (dictée libre).<br />
+            &nbsp;&nbsp;• <b>small + vocabulaire (précis)</b> : utile si tu as des termes (PPTX), réduit les erreurs hors‑sujet.
+          </div>
+
+          <div class="modalSectionTitle">4) Démarrer / Arrêter</div>
+          <div class="modalText">
+            Clique <b>Démarrer</b> pour écouter. Le texte reconnu apparaît dans “Texte reconnu”, puis la traduction dans “Traduction”.
+            Clique <b>Arrêter</b> pour stopper l’écoute.
+          </div>
+
+          <div class="modalSectionTitle">5) Fenêtre secondaire (popup)</div>
+          <div class="modalText">
+            Clique <b>Ouvrir / Fermer</b> dans “Popup” pour afficher la fenêtre secondaire. Tu peux ensuite :
+            choisir la <b>taille</b>, la <b>police</b>, le <b>fond</b>, activer <b>Sans cadre</b>, <b>Premier plan</b> et
+            <b>Redimensionnable</b>, puis <b>positionner</b> la fenêtre où tu veux (ex: sur un écran secondaire).
+          </div>
+
+          <div class="modalSectionTitle">6) Important — premiers chargements</div>
+          <div class="modalText">
+            Au <b>premier démarrage</b>, certains modèles peuvent prendre du temps à se charger :
+            <br />
+            - <b>Vosk</b> : initialisation du modèle (barre de progression en haut).<br />
+            - <b>Traduction “Local”</b> : téléchargement de <i>llama-server</i> et du modèle GGUF (peut être long).
+            <br />
+            Une fois téléchargés, les démarrages suivants sont beaucoup plus rapides.
+          </div>
+
+          <div class="actionsRow" style="margin-top:14px;">
+            <button id="onboardingOk" class="primary" type="button">Compris</button>
+            <label class="check" style="margin-left:auto;">
+              <input id="onboardingDontShow" type="checkbox" />
+              <span>Ne plus afficher</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="./node_modules/vosk-browser/dist/vosk.js"></script>
+    <script src="./node_modules/jszip/dist/jszip.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
